@@ -1,0 +1,224 @@
+---
+title: "Case-Study-1-LendingClub_Analysis"
+author: "Kushal Regmi"
+date: "7/8/2022"
+output: html_document
+---
+
+
+# Package Initialization 
+
+```{r}
+library(tidyverse)
+library(caret)
+library(elasticnet)
+library(readr)
+
+
+
+```
+
+
+```{r}
+loans_full_schema <- read.csv("loans_full_schema.csv")
+summary(loans_full_schema)
+
+```
+
+# Exploratory Data Analysis Insights
+
+### The dataset for this particular analysis involves thousands of loans made through the Lending Club platform, which is an online platform that specializes in fulfilling personal loan to individuals. The dataset in particular provides information regarding different loan recipients with 55 fields ranging from employment title to distribution methods. In looking at the data, the length of variables at play are vast and both qualitative and quantitative. Fields such as annual_joint_income and months_since_last_delinq contain large number of NA values for many recipients which is important to consider when moving forward in the analysis. 
+
+
+
+
+# Data Visualization
+
+```{r}
+ggplot(loans_full_schema) +
+  aes(x = loan_purpose, y = interest_rate) +
+  geom_boxplot(fill = "#112446") +
+  theme_minimal()
+```
+
+### Examining the plot above we see that those who took out loans for debt_consolidation, moving, and vacation observed the highest interest rates, with vacation purposes having the highest mean interest rates. In addition the most outliers with high interest rates were apparent in those who took out loans for credit cards, debt consolidation, and others. 
+
+
+
+
+```{r}
+ggplot(loans_full_schema) +
+  aes(x = loan_amount) +
+  geom_histogram(bins = 15L, fill = "#112446") +
+  theme_minimal() +
+  facet_wrap(vars(homeownership))
+```
+
+### The plot above shows the number of individuals who took out loans ranging from $0-$40000 observed by their homeowner status. We see that those who have mortgages take out higher value loans compared to those own and rent. Individuals who own a house take out much few loans compared to those with a mortgage and rent. Overall, in all three homeowner categories the majority of individuals took out loans ranging from $10,000-$15,000. 
+
+
+
+
+```{r}
+ggplot(loans_full_schema) +
+  aes(
+    x = emp_length,
+    y = account_never_delinq_percent,
+    colour = disbursement_method
+  ) +
+  geom_jitter(size = 0.5) +
+  scale_color_manual(
+    values = c(Cash = "#440154",
+    DirectPay = "#FDE725")
+  ) +
+  theme_minimal()
+
+```
+
+### The jitter plot above shows the percentage of each recipiant account that have never gone delinquent as it relates to their employment length history. The type of disbursement method is differentiated by color as either cash or direct pay. Observing this graphic we notice an overwelming amount of individuals opted to receive their loans in cash form. In addition, there is a noticable cluster of individuals with employment length around 10 years having accounts never delinquent 75-100 percent throughout their history. 
+
+
+
+
+
+```{r}
+ggplot(loans_full_schema) +
+  aes(x = earliest_credit_line) +
+  geom_density(adjust = 1L, fill = "#112446") +
+  theme_minimal() +
+  facet_wrap(vars(homeownership))
+```
+
+### The density plot above shows the earliest credit line obtained by individuals observed by their homeowner status. Individuals who rent have the highest density with recent credit history while individuals who already own a home have the highest density with older credit history. 
+
+
+
+
+
+```{r}
+ggplot(loans_full_schema) +
+  aes(x = loan_purpose, y = paid_principal) +
+  geom_boxplot(fill = "#112446") +
+  theme_minimal()
+
+```
+
+### The boxplot above shows the amount of paid princial for loans of individuals as it relates to their loan purposes. Those who took out car and vacaion loans appear to have the paid the least priciple amount, however, this could be as a result of the loan sizes that many take out for these purposes. Credit card, debt consolidation, and other loans show the highest number of outliers who paid principle balances higher than the mean of their category. Those who took out moving, renewable energy, small business, and car loans show to have the least outliers of paid principle outside their repected mean amounts per category. 
+
+
+
+
+
+
+
+
+# Data Cleansing for Interest Rate Prediction Regression Models
+
+
+### For the models that will be created for interest rate prediction we will only focus on the quantitative variables involved in the dataset. We create a subset of the full schema dataset which will only pertain to quantifiable metrics that will be used for our models. 
+
+
+
+
+
+# Muti-Modal Regression
+
+```{r}
+nums <- unlist(lapply(loans_full_schema, is.numeric))  
+
+loan_numeric <- loans_full_schema[ , nums] 
+
+loan_purpose <- lm(formula = interest_rate ~. , data = loan_numeric)
+
+summary(loan_purpose)
+plot(loan_purpose)
+```
+
+### Observing the regression model and its summary we see numerous statistics that give meaninful confidence to its performance in predicting interest rate. Our adjusted R-squared value stands at 0.7285 which gives fair validity as to accuracy. We also notices variables of high statisitical significance such as total_debit_limit, term, and installment which had the lowest p-values in our model. The Q-Q plot also shows positive linearity with few outliers. 
+
+
+
+
+
+## Feature set with 8 fields for consideration 
+
+```{r}
+# feature set 
+
+loan_feature <- loans_full_schema %>%
+  select(emp_length, annual_income, debt_to_income, total_credit_lines, total_credit_limit, total_credit_utilized, num_historical_failed_to_pay, interest_rate, num_satisfactory_accounts) %>%
+  na.omit(loan_feature)
+
+
+
+```
+
+
+
+## Correlation comparison of variables in feature set 
+
+```{r}
+cor(loan_feature)
+```
+
+
+
+
+
+# Ridge Regression Model with 10 fold Cross Validation for interest rate prediction on selected features. 
+
+```{r}
+fitControl <- trainControl(## 10-fold CV
+                           method = "repeatedcv",
+                           number = 10,
+                           repeats = 10,
+                           search = "random")
+
+model_ridge <- train(interest_rate ~ .,
+               data = loan_feature,
+               method = "ridge",
+               trControl = fitControl,
+               preProcess = c('scale', 'center'),
+               na.action = na.omit)
+
+
+```
+```{r}
+# prediction of interest rate from ridge regression model
+predictions <- predict(model_ridge, loan_feature)
+
+predictions %>%
+  head(20)
+```
+
+
+## We use a ridge regression model our interest rate prediction as this model adds bias to our estimators in efforts to reduce the standard error. Adding bias to the regression estimates offer good performance in multivariate prediction problems. The incorporating of Leave One Out Cross Validation (LOOCV) allows for decreased bias on entire dataset and resolves issues of overestimating the test error rate. 
+
+
+
+
+
+
+
+```{r}
+model_ridge
+plot(model_ridge)
+plot(predictions)
+```
+
+### The linear plot above shows the Root Mean Squared Error of the model as it relates to the weight decay value signified as lambda. The summary of our model shows the lowest Root Mean Squared Error observed at the lambda weight decay value which is signified in the plot as well. The secondary scatter plot shows the predicted interest rates for indivisuals. Most of the individuals in the index range have predicted interests rate ranging from 10-15%. 
+
+
+
+
+
+
+
+
+
+
+
+# Further Improvements
+
+
+## For further improvements I would work on finding the best fit hyperparameters for the ridge regression model using different parameters available in the train function. Experimenting with other regression methods such as lasso and even clustering algorithms would allow for better comparison of model performances and the ability to determine those of best fit. 
