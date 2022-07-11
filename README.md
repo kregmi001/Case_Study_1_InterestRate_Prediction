@@ -1,2 +1,2 @@
-# case-study-1
-# case-study-1
+# case-study-1 Lending Club Loan Analysis and Interest Rate Prediction
+
